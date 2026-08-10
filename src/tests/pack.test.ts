@@ -2,7 +2,7 @@ import fs from 'fs-extra';
 import globby from 'globby';
 import pMap from 'p-map';
 
-import { filterFilesForZipPackage, pack, copyPreBuiltResources } from '../pack';
+import { filterFilesForZipPackage, groupBuildResultsByBundlePath, pack, copyPreBuiltResources } from '../pack';
 import * as utils from '../utils';
 import type { EsbuildFunctionDefinitionHandler, FunctionBuildResult } from '../types';
 import type EsbuildServerlessPlugin from '../index';
@@ -35,7 +35,7 @@ describe('filterFilesForZipPackage', () => {
         ],
 
         depWhiteList: [],
-        functionAlias: 'fnAlias',
+        functionAliases: ['fnAlias'],
         isGoogleProvider: false,
         hasExternals: false,
         includedFiles: [],
@@ -49,6 +49,41 @@ describe('filterFilesForZipPackage', () => {
         },
       ]
     `);
+  });
+});
+
+describe('groupBuildResultsByBundlePath', () => {
+  it('should group functions that share the same bundle path', () => {
+    const buildResults: FunctionBuildResult[] = [
+      {
+        bundlePath: 'handlers/foo.js',
+        func: { handler: 'handlers/foo.handlerA', events: [], package: {} },
+        functionAlias: 'funcA',
+      },
+      {
+        bundlePath: 'handlers/foo.js',
+        func: { handler: 'handlers/foo.handlerB', events: [], package: {} },
+        functionAlias: 'funcB',
+      },
+      {
+        bundlePath: 'handlers/bar.js',
+        func: { handler: 'handlers/bar.handler', events: [], package: {} },
+        functionAlias: 'funcC',
+      },
+    ];
+
+    expect(groupBuildResultsByBundlePath(buildResults)).toEqual([
+      {
+        bundlePath: 'handlers/foo.js',
+        representativeAlias: 'funcA',
+        functions: [buildResults[0], buildResults[1]],
+      },
+      {
+        bundlePath: 'handlers/bar.js',
+        representativeAlias: 'funcC',
+        functions: [buildResults[2]],
+      },
+    ]);
   });
 });
 
@@ -203,18 +238,91 @@ describe('pack', () => {
       });
     });
   });
+
+  describe('packagePerHandler', () => {
+    it('should create one zip for functions that share a bundle path', async () => {
+      const buildResults: FunctionBuildResult[] = [
+        {
+          bundlePath: 'handlers/foo.js',
+          func: {
+            handler: 'handlers/foo.handlerA',
+            events: [{ http: { path: 'hello', method: 'get' } }],
+            package: {},
+          },
+          functionAlias: 'funcA',
+        },
+        {
+          bundlePath: 'handlers/foo.js',
+          func: {
+            handler: 'handlers/foo.handlerB',
+            events: [{ http: { path: 'hello', method: 'get' } }],
+            package: {},
+          },
+          functionAlias: 'funcB',
+        },
+      ];
+
+      const esbuildPlugin = {
+        buildResults,
+        serverless: {
+          service: {
+            package: {},
+          },
+          cli: mockCli,
+          getVersion: jest.fn().mockReturnValue('3.28.1'),
+        },
+        buildOptions: {
+          zipConcurrency: Infinity,
+          packager: 'yarn',
+          exclude: ['aws-sdk'],
+          external: [],
+          nativeZip: false,
+          packagePerHandler: true,
+        },
+        buildDirPath: '/workdir/serverless-esbuild/examples/per-handler/.esbuild/.build',
+        workDirPath: '/workdir/serverless-esbuild/examples/per-handler/.esbuild/',
+        serviceDirPath: '/workdir/serverless-esbuild/examples/per-handler',
+        log: {
+          error: jest.fn(),
+          warning: jest.fn(),
+          notice: jest.fn(),
+          info: jest.fn(),
+          debug: jest.fn(),
+          verbose: jest.fn(),
+          success: jest.fn(),
+        },
+      } as unknown as EsbuildServerlessPlugin;
+
+      const zipSpy = jest.spyOn(utils, 'zip').mockResolvedValue();
+
+      await pack.call(esbuildPlugin);
+
+      expect(zipSpy).toHaveBeenCalledTimes(1);
+      expect(zipSpy).toHaveBeenCalledWith(
+        '/workdir/serverless-esbuild/examples/per-handler/.esbuild/.serverless/funcA.zip',
+        expect.any(Array),
+        expect.any(Boolean)
+      );
+      expect(buildResults[0]!.func.package?.artifact).toEqual('.esbuild/.serverless/funcA.zip');
+      expect(buildResults[1]!.func.package?.artifact).toEqual('.esbuild/.serverless/funcA.zip');
+    });
+  });
 });
 
 describe('copyPreBuiltResources', () => {
   afterEach(() => {
     jest.clearAllMocks();
   });
-  function getMockEsbuildPlugin(bundleIndividually = true): EsbuildServerlessPlugin {
+  function getMockEsbuildPlugin(bundleIndividually = true, packagePerHandler = false): EsbuildServerlessPlugin {
     return {
       functions: {
         hello1: { handler: 'hello1.handler', events: [], package: { artifact: 'hello1' }, skipEsbuild: true },
         hello2: { handler: 'hello2.handler', events: [], package: { artifact: 'hello2' }, skipEsbuild: true },
       },
+      functionEntries: [
+        { entry: 'hello1.ts', func: null, functionAlias: 'hello1' },
+        { entry: 'hello2.ts', func: null, functionAlias: 'hello2' },
+      ],
       serverless: {
         service: {
           service: 'testApp',
@@ -226,6 +334,7 @@ describe('copyPreBuiltResources', () => {
         getVersion: jest.fn().mockReturnValue('3.28.1'),
       },
       buildOptions: {
+        packagePerHandler,
         zipConcurrency: Infinity,
         packager: 'yarn',
         exclude: ['aws-sdk'],
@@ -291,5 +400,21 @@ describe('copyPreBuiltResources', () => {
         expect(func?.package?.artifact).toEqual(`.esbuild/${SERVERLESS_FOLDER}/${functionAlias}.zip`);
       }
     });
+  });
+
+  it('should copy one artifact for functions that share an entry when packagePerHandler is enabled', async () => {
+    const mockEsbuildPlugin = {
+      ...getMockEsbuildPlugin(false, true),
+      functions: {
+        funcA: { handler: 'handlers/foo.handlerA', events: [], package: {}, skipEsbuild: true },
+        funcB: { handler: 'handlers/foo.handlerB', events: [], package: {}, skipEsbuild: true },
+      },
+    } as unknown as EsbuildServerlessPlugin;
+
+    await copyPreBuiltResources.call(mockEsbuildPlugin);
+
+    expect(fs.copy).toHaveBeenCalledTimes(1);
+    expect(mockEsbuildPlugin.functions.funcA?.package?.artifact).toEqual('.esbuild/.serverless/funcA.zip');
+    expect(mockEsbuildPlugin.functions.funcB?.package?.artifact).toEqual('.esbuild/.serverless/funcA.zip');
   });
 });

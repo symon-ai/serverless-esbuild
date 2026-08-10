@@ -51,6 +51,13 @@ export interface Configuration extends EsbuildOptions {
   skipBuildExcludeFns: string[];
   stripEntryResolveExtensions?: boolean;
   disposeContext?: boolean;
+  packagePerHandler?: boolean;
+}
+
+export interface PackageGroup {
+  bundlePath: string;
+  functions: FunctionBuildResult[];
+  representativeAlias: string;
 }
 
 export interface EsbuildFunctionDefinitionHandler extends Serverless.FunctionDefinitionHandler {

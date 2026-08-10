@@ -4,17 +4,31 @@ import path from 'path';
 import pMap from 'p-map';
 import fs from 'fs-extra';
 import globby from 'globby';
-import { intersection, isEmpty, lensProp, map, over, pipe, reject, replace, test, without } from 'ramda';
+import { intersection, isEmpty, lensProp, map, over, pipe, reject, replace, test, uniq, without } from 'ramda';
 import semver from 'semver';
 import type Serverless from 'serverless';
 
 import { ONLY_PREFIX, SERVERLESS_FOLDER } from './constants';
-import { assertIsString, doSharePath, flatDep, getDepsFromBundle, isESM, stripEntryResolveExtensions } from './helper';
+import {
+  assertIsString,
+  doSharePath,
+  flatDep,
+  getDepsFromBundle,
+  getHandlerFilePath,
+  isESM,
+  stripEntryResolveExtensions,
+} from './helper';
 import { getPackager } from './packagers';
 import { humanSize, trimExtension, zip } from './utils';
 
 import type EsbuildServerlessPlugin from './index';
-import type { EsbuildFunctionDefinitionHandler, FunctionBuildResult, FunctionReference, IFiles } from './types';
+import type {
+  EsbuildFunctionDefinitionHandler,
+  FunctionBuildResult,
+  FunctionReference,
+  IFiles,
+  PackageGroup,
+} from './types';
 
 function setFunctionArtifactPath(
   this: EsbuildServerlessPlugin,
@@ -40,9 +54,33 @@ function setFunctionArtifactPath(
 
 const excludedFilesDefault = ['package-lock.json', 'pnpm-lock.yaml', 'yarn.lock', 'package.json'];
 
+export const shouldPackageSeparately = (plugin: EsbuildServerlessPlugin): boolean =>
+  plugin.serverless?.service?.package?.individually === true || plugin.buildOptions?.packagePerHandler === true;
+
+export const groupBuildResultsByBundlePath = (buildResults: FunctionBuildResult[]): PackageGroup[] => {
+  const groups = new Map<string, FunctionBuildResult[]>();
+
+  for (const buildResult of buildResults) {
+    const existing = groups.get(buildResult.bundlePath) ?? [];
+    existing.push(buildResult);
+    groups.set(buildResult.bundlePath, existing);
+  }
+
+  return Array.from(groups.entries()).map(([bundlePath, functions]) => {
+    const representative = functions[0];
+    assert(representative, `No functions found for bundle path ${bundlePath}`);
+
+    return {
+      bundlePath,
+      functions,
+      representativeAlias: representative.functionAlias,
+    };
+  });
+};
+
 export const filterFilesForZipPackage = ({
   files,
-  functionAlias,
+  functionAliases,
   includedFiles,
   excludedFiles,
   hasExternals,
@@ -50,7 +88,7 @@ export const filterFilesForZipPackage = ({
   depWhiteList,
 }: {
   files: IFiles;
-  functionAlias: string;
+  functionAliases: string[];
   includedFiles: string[];
   excludedFiles: string[];
   hasExternals: boolean;
@@ -69,7 +107,12 @@ export const filterFilesForZipPackage = ({
     }
 
     // exclude files that belong to individual functions
-    if (localPath.startsWith(ONLY_PREFIX) && !localPath.startsWith(`${ONLY_PREFIX}${functionAlias}/`)) return false;
+    if (
+      localPath.startsWith(ONLY_PREFIX) &&
+      !functionAliases.some((functionAlias) => localPath.startsWith(`${ONLY_PREFIX}${functionAlias}/`))
+    ) {
+      return false;
+    }
 
     // exclude non whitelisted dependencies
     if (localPath.startsWith('node_modules')) {
@@ -86,6 +129,42 @@ export const filterFilesForZipPackage = ({
   });
 };
 
+const stripOnlyPrefixes = (files: IFiles, functionAliases: string[]) => {
+  const strippedFiles = files.map(({ localPath, ...rest }) => {
+    let strippedPath = localPath;
+
+    for (const functionAlias of functionAliases) {
+      strippedPath = strippedPath.replace(`${ONLY_PREFIX}${functionAlias}/`, '');
+    }
+
+    return { localPath: strippedPath, ...rest };
+  });
+
+  const seen = new Set<string>();
+
+  return strippedFiles.filter(({ localPath }) => {
+    if (seen.has(localPath)) {
+      return false;
+    }
+
+    seen.add(localPath);
+
+    return true;
+  });
+};
+
+const getPackageGroups = (buildResults: FunctionBuildResult[], packagePerHandler: boolean): PackageGroup[] => {
+  if (packagePerHandler) {
+    return groupBuildResultsByBundlePath(buildResults);
+  }
+
+  return buildResults.map((buildResult) => ({
+    bundlePath: buildResult.bundlePath,
+    functions: [buildResult],
+    representativeAlias: buildResult.functionAlias,
+  }));
+};
+
 // eslint-disable-next-line max-statements
 export async function pack(this: EsbuildServerlessPlugin) {
   // GOOGLE Provider requires a package.json and NO node_modules
@@ -94,10 +173,12 @@ export async function pack(this: EsbuildServerlessPlugin) {
   const isGoogleProvider = this.serverless?.service?.provider?.name === 'google';
   const isScalewayProvider = this.serverless?.service?.provider?.name === 'scaleway'; // Scaleway can not have package: individually
   const excludedFiles = isGoogleProvider ? [] : excludedFilesDefault;
+  const packagePerHandler = this.buildOptions?.packagePerHandler === true;
+  const packageSeparately = shouldPackageSeparately(this);
 
   // Google and Scaleway providers cannot use individual packaging for now - this could be built in a future release
   const isPackageIndividuallyNotSupported = isGoogleProvider || isScalewayProvider || false;
-  if (isPackageIndividuallyNotSupported && this.serverless?.service?.package?.individually) {
+  if (isPackageIndividuallyNotSupported && (this.serverless?.service?.package?.individually || packagePerHandler)) {
     throw new Error(`Packaging failed: cannot package function individually when using ${providerName} provider`);
   }
 
@@ -131,7 +212,7 @@ export async function pack(this: EsbuildServerlessPlugin) {
   }
 
   // 1) If individually is not set, just zip the all build dir and return
-  if (!this.serverless?.service?.package?.individually) {
+  if (!packageSeparately) {
     const zipName = `${this.serverless.service.service}.zip`;
     const artifactPath = path.join(workDirPath, SERVERLESS_FOLDER, zipName);
 
@@ -157,7 +238,7 @@ export async function pack(this: EsbuildServerlessPlugin) {
 
   assertIsString(this.buildOptions?.packager, 'packager is not a string');
 
-  // 2) If individually is set, we'll optimize files and zip per-function
+  // 2) If individually or packagePerHandler is set, we'll optimize files and zip per-function or per-handler
   const packager = await getPackager.call(this, this.buildOptions.packager, this.buildOptions.packagerOptions);
 
   // get a list of every function bundle
@@ -165,7 +246,8 @@ export async function pack(this: EsbuildServerlessPlugin) {
 
   assert(buildResults, 'buildResults is not an array');
 
-  const bundlePathList = buildResults.map((results) => results.bundlePath);
+  const packageGroups = getPackageGroups(buildResults, packagePerHandler);
+  const bundlePathList = uniq(buildResults.map((results) => results.bundlePath));
 
   let externals: string[] = [];
 
@@ -183,12 +265,13 @@ export async function pack(this: EsbuildServerlessPlugin) {
 
   const packageFiles = await globby(this.serverless.service.package.patterns);
 
-  const zipMapper = async (buildResult: FunctionBuildResult) => {
-    const { func, functionAlias, bundlePath } = buildResult;
+  const zipMapper = async (packageGroup: PackageGroup) => {
+    const { bundlePath, functions, representativeAlias } = packageGroup;
+    const functionAliases = functions.map(({ functionAlias }) => functionAlias);
 
-    const bundleExcludedFiles = bundlePathList.filter((item) => !bundlePath.startsWith(item)).map(trimExtension);
+    const bundleExcludedFiles = bundlePathList.filter((item) => item !== bundlePath).map(trimExtension);
 
-    const functionPackagePatterns = func.package?.patterns || [];
+    const functionPackagePatterns = functions.flatMap(({ func }) => func.package?.patterns || []);
 
     const functionExclusionPatterns = functionPackagePatterns
       .filter((pattern) => pattern.charAt(0) === '!')
@@ -210,49 +293,81 @@ export async function pack(this: EsbuildServerlessPlugin) {
       depWhiteList = flatDep(packagerDependenciesList.dependencies, bundleExternals);
     }
 
-    const zipName = `${functionAlias}.zip`;
+    const zipName = `${representativeAlias}.zip`;
     const artifactPath = path.join(workDirPath, SERVERLESS_FOLDER, zipName);
 
     // filter files
-    const filesPathList = filterFilesForZipPackage({
-      files,
-      functionAlias,
-      includedFiles,
-      hasExternals,
-      isGoogleProvider,
-      depWhiteList,
-      excludedFiles: excludedPackageFiles,
-    })
-      // remove prefix from individual function extra files
-      .map(({ localPath, ...rest }) => ({
-        localPath: localPath.replace(`${ONLY_PREFIX}${functionAlias}/`, ''),
-        ...rest,
-      }));
+    const filesPathList = stripOnlyPrefixes(
+      filterFilesForZipPackage({
+        files,
+        functionAliases,
+        includedFiles,
+        hasExternals,
+        isGoogleProvider,
+        depWhiteList,
+        excludedFiles: excludedPackageFiles,
+      }),
+      functionAliases
+    );
 
     const startZip = Date.now();
     await zip(artifactPath, filesPathList, buildOptions.nativeZip);
     const { size } = fs.statSync(artifactPath);
-    this.log.verbose(`Function zipped: ${functionAlias} - ${humanSize(size)} [${Date.now() - startZip} ms]`);
+    this.log.verbose(`Function zipped: ${representativeAlias} - ${humanSize(size)} [${Date.now() - startZip} ms]`);
 
-    // defined present zip as output artifact
-    setFunctionArtifactPath.call(this, func, path.relative(this.serviceDirPath, artifactPath));
+    const relativeArtifactPath = path.relative(this.serviceDirPath, artifactPath);
+
+    for (const { func } of functions) {
+      setFunctionArtifactPath.call(this, func, relativeArtifactPath);
+    }
   };
 
   this.log.verbose(`Zipping with concurrency: ${buildOptions.zipConcurrency}`);
-  await pMap(buildResults, zipMapper, { concurrency: buildOptions.zipConcurrency });
+  await pMap(packageGroups, zipMapper, { concurrency: buildOptions.zipConcurrency });
   this.log.verbose('All functions zipped.');
 }
+
+export const groupFunctionReferencesByHandlerPath = (functionReferences: FunctionReference[]): PackageGroup[] => {
+  const groups = new Map<string, FunctionReference[]>();
+
+  for (const functionReference of functionReferences) {
+    const handlerPath = getHandlerFilePath(
+      functionReference.func.handler,
+      (functionReference.func as EsbuildFunctionDefinitionHandler).esbuildEntrypoint
+    );
+    const existing = groups.get(handlerPath) ?? [];
+    existing.push(functionReference);
+    groups.set(handlerPath, existing);
+  }
+
+  return Array.from(groups.entries()).map(([bundlePath, functions]) => {
+    const representative = functions[0];
+    assert(representative, `No functions found for handler path ${bundlePath}`);
+
+    return {
+      bundlePath,
+      functions: functions.map(({ func, functionAlias }) => ({
+        bundlePath,
+        func,
+        functionAlias,
+      })),
+      representativeAlias: representative.functionAlias,
+    };
+  });
+};
 
 export async function copyPreBuiltResources(this: EsbuildServerlessPlugin) {
   this.log.verbose('Copying Prebuilt resources');
 
   const { workDirPath, packageOutputPath } = this;
+  const packagePerHandler = this.buildOptions?.packagePerHandler === true;
+  const packageSeparately = shouldPackageSeparately(this);
 
   assertIsString(workDirPath, 'workDirPath is not a string');
   assertIsString(packageOutputPath, 'packageOutputPath is not a string');
 
   // 1) If individually is not set, just zip the all build dir and return
-  if (!this.serverless?.service?.package?.individually) {
+  if (!packageSeparately) {
     const zipName = `${this.serverless.service.service}.zip`;
     await fs.copy(path.join(packageOutputPath, zipName), path.join(workDirPath, SERVERLESS_FOLDER, zipName));
     // defined present zip as output artifact
@@ -261,25 +376,40 @@ export async function copyPreBuiltResources(this: EsbuildServerlessPlugin) {
     return;
   }
 
-  // get a list of every function bundle
-  const buildResults = Object.entries(this.functions)
+  const skippedFunctions = Object.entries(this.functions)
     .filter(([functionAlias, func]) => func && functionAlias)
-    .map(([functionAlias, func]) => ({ func, functionAlias })) as FunctionReference[];
+    .map(([functionAlias, func]) => ({ func, functionAlias }))
+    .filter(({ func }) => (func as EsbuildFunctionDefinitionHandler).skipEsbuild) as FunctionReference[];
 
-  assert(buildResults, 'buildResults is not an array');
-  const zipMapper = async (buildResult: FunctionReference) => {
-    const { func, functionAlias } = buildResult;
+  const packageGroups = packagePerHandler
+    ? groupFunctionReferencesByHandlerPath(skippedFunctions)
+    : skippedFunctions.map((functionReference) => ({
+        bundlePath: functionReference.functionAlias,
+        functions: [
+          {
+            bundlePath: functionReference.functionAlias,
+            func: functionReference.func,
+            functionAlias: functionReference.functionAlias,
+          },
+        ],
+        representativeAlias: functionReference.functionAlias,
+      }));
 
-    if ((func as EsbuildFunctionDefinitionHandler).skipEsbuild) {
-      const zipName = `${functionAlias}.zip`;
-      const artifactPath = path.join(workDirPath, SERVERLESS_FOLDER, zipName);
+  assert(packageGroups, 'packageGroups is not an array');
+  const zipMapper = async (packageGroup: PackageGroup) => {
+    const { functions, representativeAlias } = packageGroup;
+    const zipName = `${representativeAlias}.zip`;
+    const artifactPath = path.join(workDirPath, SERVERLESS_FOLDER, zipName);
 
-      // defined present zip as output artifact
-      await fs.copy(path.join(packageOutputPath, zipName), artifactPath);
-      setFunctionArtifactPath.call(this, func, path.relative(this.serviceDirPath, artifactPath));
+    await fs.copy(path.join(packageOutputPath, zipName), artifactPath);
+
+    const relativeArtifactPath = path.relative(this.serviceDirPath, artifactPath);
+
+    for (const { func } of functions) {
+      setFunctionArtifactPath.call(this, func, relativeArtifactPath);
     }
   };
 
-  await pMap(buildResults, zipMapper, {});
+  await pMap(packageGroups, zipMapper, {});
   this.log.verbose('All functions copied.');
 }

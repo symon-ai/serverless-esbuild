@@ -16,6 +16,7 @@ import {
   assertIsSupportedRuntime,
   buildServerlessV3LoggerFromLegacyLogger,
   extractFunctionEntries,
+  getHandlerFilePath,
   isNodeMatcherKey,
   providerRuntimeMatcher,
 } from './helper';
@@ -221,6 +222,37 @@ class EsbuildServerlessPlugin implements ServerlessPlugin {
     return Boolean((func as Serverless.FunctionDefinitionHandler)?.handler);
   }
 
+  private applySkipBuildFlags(
+    nodeFunctions: Record<string, Serverless.FunctionDefinitionHandler>,
+    buildOptions: Configuration
+  ) {
+    const handlerPathByAlias = new Map<string, string>();
+
+    for (const [functionAlias, fn] of Object.entries(nodeFunctions)) {
+      const currFn = fn as EsbuildFunctionDefinitionHandler;
+      handlerPathByAlias.set(functionAlias, getHandlerFilePath(currFn.handler, currFn.esbuildEntrypoint));
+    }
+
+    const aliasesByHandlerPath = new Map<string, string[]>();
+
+    for (const [functionAlias, handlerPath] of handlerPathByAlias) {
+      const aliases = aliasesByHandlerPath.get(handlerPath) ?? [];
+      aliases.push(functionAlias);
+      aliasesByHandlerPath.set(handlerPath, aliases);
+    }
+
+    for (const [functionAlias, fn] of Object.entries(nodeFunctions)) {
+      const currFn = fn as EsbuildFunctionDefinitionHandler;
+      const handlerPath = handlerPathByAlias.get(functionAlias);
+      const groupAliases = handlerPath ? aliasesByHandlerPath.get(handlerPath) ?? [functionAlias] : [functionAlias];
+      const groupShouldRebuild = groupAliases.some((alias) => buildOptions.skipBuildExcludeFns?.includes(alias));
+
+      if (!groupShouldRebuild && !buildOptions.skipBuildExcludeFns?.includes(functionAlias)) {
+        currFn.skipEsbuild = true;
+      }
+    }
+  }
+
   get functions(): Record<string, Serverless.FunctionDefinitionHandler> {
     const functions = this.options.function
       ? {
@@ -236,12 +268,12 @@ class EsbuildServerlessPlugin implements ServerlessPlugin {
       const currFn = fn as EsbuildFunctionDefinitionHandler;
       if (this.isFunctionDefinitionHandler(currFn) && this.isNodeFunction(currFn)) {
         buildOptions.disposeContext = currFn.disposeContext ? currFn.disposeContext : buildOptions.disposeContext; // disposeContext configuration can be overridden per function
-        if (buildOptions.skipBuild && !buildOptions.skipBuildExcludeFns?.includes(functionAlias)) {
-          currFn.skipEsbuild = true;
-        }
-
         nodeFunctions[functionAlias] = currFn;
       }
+    }
+
+    if (buildOptions.skipBuild) {
+      this.applySkipBuildFlags(nodeFunctions, buildOptions);
     }
 
     return nodeFunctions;
@@ -331,6 +363,7 @@ class EsbuildServerlessPlugin implements ServerlessPlugin {
       skipBuildExcludeFns: [],
       stripEntryResolveExtensions: false,
       disposeContext: true, // default true
+      packagePerHandler: false,
     };
 
     const providerRuntime = this.serverless.service.provider.runtime;
@@ -519,7 +552,7 @@ class EsbuildServerlessPlugin implements ServerlessPlugin {
 
     await fs.copy(path.join(this.workDirPath, SERVERLESS_FOLDER), path.join(this.serviceDirPath, SERVERLESS_FOLDER));
 
-    if (service.package.individually === true || this.options.function) {
+    if (service.package.individually === true || this.buildOptions?.packagePerHandler || this.options.function) {
       Object.values(this.functions).forEach((func) => {
         if (func.package?.artifact) {
           // eslint-disable-next-line no-param-reassign

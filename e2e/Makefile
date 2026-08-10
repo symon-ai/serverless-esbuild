@@ -22,7 +22,7 @@ test-e2e-individually: build
 test-e2e-per-handler: build
 	rm -fr ./.test-artifacts && mkdir -p ./.test-artifacts/per-handler && rsync -r ./examples/per-handler/ ./.test-artifacts/per-handler/
 	cd ./.test-artifacts/per-handler && npm install && $(PATCH_REQUIRE) && npx sls package
-	cd ./.test-artifacts/per-handler/.serverless && unzip funcA.zip && unzip funcC.zip
+	cd ./.test-artifacts/per-handler/.serverless && unzip foo.zip && unzip bar.zip
 	npx jest -c jest.config.e2e.js --ci ./e2e/per-handler.test.ts
 	rm -fr ./.test-artifacts
 

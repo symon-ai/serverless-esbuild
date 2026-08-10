@@ -362,7 +362,7 @@ exports[`per-handler 6`] = `
         "S3Bucket": {
           "Ref": "ServerlessDeploymentBucket",
         },
-        "S3Key": StringContaining "funcA.zip",
+        "S3Key": StringContaining "foo.zip",
       },
       "FunctionName": "serverless-example-dev-funcA",
       "Handler": "handlers/foo.handlerA",
@@ -430,7 +430,7 @@ exports[`per-handler 6`] = `
         "S3Bucket": {
           "Ref": "ServerlessDeploymentBucket",
         },
-        "S3Key": StringContaining "funcA.zip",
+        "S3Key": StringContaining "foo.zip",
       },
       "FunctionName": "serverless-example-dev-funcB",
       "Handler": "handlers/foo.handlerB",
@@ -498,7 +498,7 @@ exports[`per-handler 6`] = `
         "S3Bucket": {
           "Ref": "ServerlessDeploymentBucket",
         },
-        "S3Key": StringContaining "funcC.zip",
+        "S3Key": StringContaining "bar.zip",
       },
       "FunctionName": "serverless-example-dev-funcC",
       "Handler": "handlers/bar.handler",

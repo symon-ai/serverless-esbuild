@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.groupFunctionReferencesByHandlerPath = exports.filterFilesForZipPackage = exports.groupBuildResultsByBundlePath = exports.shouldPackageSeparately = void 0;
+exports.groupFunctionReferencesByHandlerPath = exports.filterFilesForZipPackage = exports.groupBuildResultsByBundlePath = exports.assertNoDuplicateArtifactNames = exports.getArtifactNameFromBundlePath = exports.shouldPackageSeparately = void 0;
 exports.pack = pack;
 exports.copyPreBuiltResources = copyPreBuiltResources;
 const assert_1 = __importDefault(require("assert"));
@@ -37,6 +37,27 @@ function setFunctionArtifactPath(func, artifactPath) {
 const excludedFilesDefault = ['package-lock.json', 'pnpm-lock.yaml', 'yarn.lock', 'package.json'];
 const shouldPackageSeparately = (plugin) => plugin.serverless?.service?.package?.individually === true || plugin.buildOptions?.packagePerHandler === true;
 exports.shouldPackageSeparately = shouldPackageSeparately;
+const getArtifactNameFromBundlePath = (bundlePath) => path_1.default.basename((0, utils_1.trimExtension)(bundlePath));
+exports.getArtifactNameFromBundlePath = getArtifactNameFromBundlePath;
+const assertNoDuplicateArtifactNames = (packageGroups) => {
+    const artifactNameToBundlePaths = new Map();
+    for (const { artifactName, bundlePath } of packageGroups) {
+        const bundlePaths = artifactNameToBundlePaths.get(artifactName) ?? [];
+        if (!bundlePaths.includes(bundlePath)) {
+            bundlePaths.push(bundlePath);
+        }
+        artifactNameToBundlePaths.set(artifactName, bundlePaths);
+    }
+    const duplicates = Array.from(artifactNameToBundlePaths.entries()).filter(([, bundlePaths]) => bundlePaths.length > 1);
+    if (duplicates.length === 0) {
+        return;
+    }
+    const details = duplicates
+        .map(([artifactName, bundlePaths]) => `"${artifactName}.zip" would be used by: ${bundlePaths.join(', ')}`)
+        .join('; ');
+    throw new Error(`Packaging failed: duplicate handler artifact names. ${details}`);
+};
+exports.assertNoDuplicateArtifactNames = assertNoDuplicateArtifactNames;
 const groupBuildResultsByBundlePath = (buildResults) => {
     const groups = new Map();
     for (const buildResult of buildResults) {
@@ -44,15 +65,16 @@ const groupBuildResultsByBundlePath = (buildResults) => {
         existing.push(buildResult);
         groups.set(buildResult.bundlePath, existing);
     }
-    return Array.from(groups.entries()).map(([bundlePath, functions]) => {
-        const representative = functions[0];
-        (0, assert_1.default)(representative, `No functions found for bundle path ${bundlePath}`);
+    const packageGroups = Array.from(groups.entries()).map(([bundlePath, functions]) => {
+        (0, assert_1.default)(functions[0], `No functions found for bundle path ${bundlePath}`);
         return {
             bundlePath,
             functions,
-            representativeAlias: representative.functionAlias,
+            artifactName: (0, exports.getArtifactNameFromBundlePath)(bundlePath),
         };
     });
+    (0, exports.assertNoDuplicateArtifactNames)(packageGroups);
+    return packageGroups;
 };
 exports.groupBuildResultsByBundlePath = groupBuildResultsByBundlePath;
 const filterFilesForZipPackage = ({ files, functionAliases, includedFiles, excludedFiles, hasExternals, isGoogleProvider, depWhiteList, }) => {
@@ -108,7 +130,7 @@ const getPackageGroups = (buildResults, packagePerHandler) => {
     return buildResults.map((buildResult) => ({
         bundlePath: buildResult.bundlePath,
         functions: [buildResult],
-        representativeAlias: buildResult.functionAlias,
+        artifactName: buildResult.functionAlias,
     }));
 };
 // eslint-disable-next-line max-statements
@@ -182,7 +204,7 @@ async function pack() {
     const packagerDependenciesList = hasExternals ? await packager.getProdDependencies(buildDirPath) : {};
     const packageFiles = await (0, globby_1.default)(this.serverless.service.package.patterns);
     const zipMapper = async (packageGroup) => {
-        const { bundlePath, functions, representativeAlias } = packageGroup;
+        const { bundlePath, functions, artifactName } = packageGroup;
         const functionAliases = functions.map(({ functionAlias }) => functionAlias);
         const bundleExcludedFiles = bundlePathList.filter((item) => item !== bundlePath).map(utils_1.trimExtension);
         const functionPackagePatterns = functions.flatMap(({ func }) => func.package?.patterns || []);
@@ -200,7 +222,7 @@ async function pack() {
             const bundleExternals = (0, ramda_1.intersection)(bundleDeps, externals);
             depWhiteList = (0, helper_1.flatDep)(packagerDependenciesList.dependencies, bundleExternals);
         }
-        const zipName = `${representativeAlias}.zip`;
+        const zipName = `${artifactName}.zip`;
         const artifactPath = path_1.default.join(workDirPath, constants_1.SERVERLESS_FOLDER, zipName);
         // filter files
         const filesPathList = stripOnlyPrefixes((0, exports.filterFilesForZipPackage)({
@@ -215,7 +237,7 @@ async function pack() {
         const startZip = Date.now();
         await (0, utils_1.zip)(artifactPath, filesPathList, buildOptions.nativeZip);
         const { size } = fs_extra_1.default.statSync(artifactPath);
-        this.log.verbose(`Function zipped: ${representativeAlias} - ${(0, utils_1.humanSize)(size)} [${Date.now() - startZip} ms]`);
+        this.log.verbose(`Function zipped: ${artifactName} - ${(0, utils_1.humanSize)(size)} [${Date.now() - startZip} ms]`);
         const relativeArtifactPath = path_1.default.relative(this.serviceDirPath, artifactPath);
         for (const { func } of functions) {
             setFunctionArtifactPath.call(this, func, relativeArtifactPath);
@@ -233,9 +255,8 @@ const groupFunctionReferencesByHandlerPath = (functionReferences) => {
         existing.push(functionReference);
         groups.set(handlerPath, existing);
     }
-    return Array.from(groups.entries()).map(([bundlePath, functions]) => {
-        const representative = functions[0];
-        (0, assert_1.default)(representative, `No functions found for handler path ${bundlePath}`);
+    const packageGroups = Array.from(groups.entries()).map(([bundlePath, functions]) => {
+        (0, assert_1.default)(functions[0], `No functions found for handler path ${bundlePath}`);
         return {
             bundlePath,
             functions: functions.map(({ func, functionAlias }) => ({
@@ -243,9 +264,11 @@ const groupFunctionReferencesByHandlerPath = (functionReferences) => {
                 func,
                 functionAlias,
             })),
-            representativeAlias: representative.functionAlias,
+            artifactName: path_1.default.basename(bundlePath),
         };
     });
+    (0, exports.assertNoDuplicateArtifactNames)(packageGroups);
+    return packageGroups;
 };
 exports.groupFunctionReferencesByHandlerPath = groupFunctionReferencesByHandlerPath;
 async function copyPreBuiltResources() {
@@ -278,12 +301,12 @@ async function copyPreBuiltResources() {
                     functionAlias: functionReference.functionAlias,
                 },
             ],
-            representativeAlias: functionReference.functionAlias,
+            artifactName: functionReference.functionAlias,
         }));
     (0, assert_1.default)(packageGroups, 'packageGroups is not an array');
     const zipMapper = async (packageGroup) => {
-        const { functions, representativeAlias } = packageGroup;
-        const zipName = `${representativeAlias}.zip`;
+        const { functions, artifactName } = packageGroup;
+        const zipName = `${artifactName}.zip`;
         const artifactPath = path_1.default.join(workDirPath, constants_1.SERVERLESS_FOLDER, zipName);
         await fs_extra_1.default.copy(path_1.default.join(packageOutputPath, zipName), artifactPath);
         const relativeArtifactPath = path_1.default.relative(this.serviceDirPath, artifactPath);

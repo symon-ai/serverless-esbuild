@@ -57,6 +57,36 @@ const excludedFilesDefault = ['package-lock.json', 'pnpm-lock.yaml', 'yarn.lock'
 export const shouldPackageSeparately = (plugin: EsbuildServerlessPlugin): boolean =>
   plugin.serverless?.service?.package?.individually === true || plugin.buildOptions?.packagePerHandler === true;
 
+export const getArtifactNameFromBundlePath = (bundlePath: string): string => path.basename(trimExtension(bundlePath));
+
+export const assertNoDuplicateArtifactNames = (packageGroups: PackageGroup[]): void => {
+  const artifactNameToBundlePaths = new Map<string, string[]>();
+
+  for (const { artifactName, bundlePath } of packageGroups) {
+    const bundlePaths = artifactNameToBundlePaths.get(artifactName) ?? [];
+
+    if (!bundlePaths.includes(bundlePath)) {
+      bundlePaths.push(bundlePath);
+    }
+
+    artifactNameToBundlePaths.set(artifactName, bundlePaths);
+  }
+
+  const duplicates = Array.from(artifactNameToBundlePaths.entries()).filter(
+    ([, bundlePaths]) => bundlePaths.length > 1
+  );
+
+  if (duplicates.length === 0) {
+    return;
+  }
+
+  const details = duplicates
+    .map(([artifactName, bundlePaths]) => `"${artifactName}.zip" would be used by: ${bundlePaths.join(', ')}`)
+    .join('; ');
+
+  throw new Error(`Packaging failed: duplicate handler artifact names. ${details}`);
+};
+
 export const groupBuildResultsByBundlePath = (buildResults: FunctionBuildResult[]): PackageGroup[] => {
   const groups = new Map<string, FunctionBuildResult[]>();
 
@@ -66,16 +96,19 @@ export const groupBuildResultsByBundlePath = (buildResults: FunctionBuildResult[
     groups.set(buildResult.bundlePath, existing);
   }
 
-  return Array.from(groups.entries()).map(([bundlePath, functions]) => {
-    const representative = functions[0];
-    assert(representative, `No functions found for bundle path ${bundlePath}`);
+  const packageGroups = Array.from(groups.entries()).map(([bundlePath, functions]) => {
+    assert(functions[0], `No functions found for bundle path ${bundlePath}`);
 
     return {
       bundlePath,
       functions,
-      representativeAlias: representative.functionAlias,
+      artifactName: getArtifactNameFromBundlePath(bundlePath),
     };
   });
+
+  assertNoDuplicateArtifactNames(packageGroups);
+
+  return packageGroups;
 };
 
 export const filterFilesForZipPackage = ({
@@ -161,7 +194,7 @@ const getPackageGroups = (buildResults: FunctionBuildResult[], packagePerHandler
   return buildResults.map((buildResult) => ({
     bundlePath: buildResult.bundlePath,
     functions: [buildResult],
-    representativeAlias: buildResult.functionAlias,
+    artifactName: buildResult.functionAlias,
   }));
 };
 
@@ -266,7 +299,7 @@ export async function pack(this: EsbuildServerlessPlugin) {
   const packageFiles = await globby(this.serverless.service.package.patterns);
 
   const zipMapper = async (packageGroup: PackageGroup) => {
-    const { bundlePath, functions, representativeAlias } = packageGroup;
+    const { bundlePath, functions, artifactName } = packageGroup;
     const functionAliases = functions.map(({ functionAlias }) => functionAlias);
 
     const bundleExcludedFiles = bundlePathList.filter((item) => item !== bundlePath).map(trimExtension);
@@ -293,7 +326,7 @@ export async function pack(this: EsbuildServerlessPlugin) {
       depWhiteList = flatDep(packagerDependenciesList.dependencies, bundleExternals);
     }
 
-    const zipName = `${representativeAlias}.zip`;
+    const zipName = `${artifactName}.zip`;
     const artifactPath = path.join(workDirPath, SERVERLESS_FOLDER, zipName);
 
     // filter files
@@ -313,7 +346,7 @@ export async function pack(this: EsbuildServerlessPlugin) {
     const startZip = Date.now();
     await zip(artifactPath, filesPathList, buildOptions.nativeZip);
     const { size } = fs.statSync(artifactPath);
-    this.log.verbose(`Function zipped: ${representativeAlias} - ${humanSize(size)} [${Date.now() - startZip} ms]`);
+    this.log.verbose(`Function zipped: ${artifactName} - ${humanSize(size)} [${Date.now() - startZip} ms]`);
 
     const relativeArtifactPath = path.relative(this.serviceDirPath, artifactPath);
 
@@ -340,9 +373,8 @@ export const groupFunctionReferencesByHandlerPath = (functionReferences: Functio
     groups.set(handlerPath, existing);
   }
 
-  return Array.from(groups.entries()).map(([bundlePath, functions]) => {
-    const representative = functions[0];
-    assert(representative, `No functions found for handler path ${bundlePath}`);
+  const packageGroups = Array.from(groups.entries()).map(([bundlePath, functions]) => {
+    assert(functions[0], `No functions found for handler path ${bundlePath}`);
 
     return {
       bundlePath,
@@ -351,9 +383,13 @@ export const groupFunctionReferencesByHandlerPath = (functionReferences: Functio
         func,
         functionAlias,
       })),
-      representativeAlias: representative.functionAlias,
+      artifactName: path.basename(bundlePath),
     };
   });
+
+  assertNoDuplicateArtifactNames(packageGroups);
+
+  return packageGroups;
 };
 
 export async function copyPreBuiltResources(this: EsbuildServerlessPlugin) {
@@ -392,13 +428,13 @@ export async function copyPreBuiltResources(this: EsbuildServerlessPlugin) {
             functionAlias: functionReference.functionAlias,
           },
         ],
-        representativeAlias: functionReference.functionAlias,
+        artifactName: functionReference.functionAlias,
       }));
 
   assert(packageGroups, 'packageGroups is not an array');
   const zipMapper = async (packageGroup: PackageGroup) => {
-    const { functions, representativeAlias } = packageGroup;
-    const zipName = `${representativeAlias}.zip`;
+    const { functions, artifactName } = packageGroup;
+    const zipName = `${artifactName}.zip`;
     const artifactPath = path.join(workDirPath, SERVERLESS_FOLDER, zipName);
 
     await fs.copy(path.join(packageOutputPath, zipName), artifactPath);

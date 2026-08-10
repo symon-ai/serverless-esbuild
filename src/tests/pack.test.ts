@@ -2,7 +2,13 @@ import fs from 'fs-extra';
 import globby from 'globby';
 import pMap from 'p-map';
 
-import { filterFilesForZipPackage, groupBuildResultsByBundlePath, pack, copyPreBuiltResources } from '../pack';
+import {
+  filterFilesForZipPackage,
+  groupBuildResultsByBundlePath,
+  pack,
+  copyPreBuiltResources,
+  assertNoDuplicateArtifactNames,
+} from '../pack';
 import * as utils from '../utils';
 import type { EsbuildFunctionDefinitionHandler, FunctionBuildResult } from '../types';
 import type EsbuildServerlessPlugin from '../index';
@@ -75,15 +81,48 @@ describe('groupBuildResultsByBundlePath', () => {
     expect(groupBuildResultsByBundlePath(buildResults)).toEqual([
       {
         bundlePath: 'handlers/foo.js',
-        representativeAlias: 'funcA',
+        artifactName: 'foo',
         functions: [buildResults[0], buildResults[1]],
       },
       {
         bundlePath: 'handlers/bar.js',
-        representativeAlias: 'funcC',
+        artifactName: 'bar',
         functions: [buildResults[2]],
       },
     ]);
+  });
+
+  it('should throw when distinct entries resolve to the same artifact name', () => {
+    const buildResults: FunctionBuildResult[] = [
+      {
+        bundlePath: 'handlers/foo.js',
+        func: { handler: 'handlers/foo.handler', events: [], package: {} },
+        functionAlias: 'funcA',
+      },
+      {
+        bundlePath: 'jobs/foo.js',
+        func: { handler: 'jobs/foo.handler', events: [], package: {} },
+        functionAlias: 'funcB',
+      },
+    ];
+
+    expect(() => groupBuildResultsByBundlePath(buildResults)).toThrow(
+      'Packaging failed: duplicate handler artifact names. "foo.zip" would be used by: handlers/foo.js, jobs/foo.js'
+    );
+  });
+});
+
+describe('assertNoDuplicateArtifactNames', () => {
+  it('should allow multiple functions in the same package group', () => {
+    expect(() =>
+      assertNoDuplicateArtifactNames([
+        {
+          bundlePath: 'handlers/foo.js',
+          artifactName: 'foo',
+          functions: [],
+        },
+      ])
+    ).not.toThrow();
   });
 });
 
@@ -299,12 +338,12 @@ describe('pack', () => {
 
       expect(zipSpy).toHaveBeenCalledTimes(1);
       expect(zipSpy).toHaveBeenCalledWith(
-        '/workdir/serverless-esbuild/examples/per-handler/.esbuild/.serverless/funcA.zip',
+        '/workdir/serverless-esbuild/examples/per-handler/.esbuild/.serverless/foo.zip',
         expect.any(Array),
         expect.any(Boolean)
       );
-      expect(buildResults[0]!.func.package?.artifact).toEqual('.esbuild/.serverless/funcA.zip');
-      expect(buildResults[1]!.func.package?.artifact).toEqual('.esbuild/.serverless/funcA.zip');
+      expect(buildResults[0]!.func.package?.artifact).toEqual('.esbuild/.serverless/foo.zip');
+      expect(buildResults[1]!.func.package?.artifact).toEqual('.esbuild/.serverless/foo.zip');
     });
   });
 });
@@ -414,7 +453,7 @@ describe('copyPreBuiltResources', () => {
     await copyPreBuiltResources.call(mockEsbuildPlugin);
 
     expect(fs.copy).toHaveBeenCalledTimes(1);
-    expect(mockEsbuildPlugin.functions.funcA?.package?.artifact).toEqual('.esbuild/.serverless/funcA.zip');
-    expect(mockEsbuildPlugin.functions.funcB?.package?.artifact).toEqual('.esbuild/.serverless/funcA.zip');
+    expect(mockEsbuildPlugin.functions.funcA?.package?.artifact).toEqual('.esbuild/.serverless/foo.zip');
+    expect(mockEsbuildPlugin.functions.funcB?.package?.artifact).toEqual('.esbuild/.serverless/foo.zip');
   });
 });

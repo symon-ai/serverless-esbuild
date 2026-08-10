@@ -224,7 +224,9 @@ functions:
     handler: handlers/foo.handlerB
 ```
 
-In this example, `funcA` and `funcB` both resolve to `handlers/foo.ts`, so they are packaged into a single zip named after the first declared function (`funcA.zip`). Each function still uses its own handler export at runtime.
+In this example, `funcA` and `funcB` both resolve to `handlers/foo.ts`, so they are packaged into a single zip named after the handler entry basename (`foo.zip`). Each function still uses its own handler export at runtime.
+
+If two different handler entry files would produce the same zip basename, packaging fails with a duplicate artifact name error. For example, `handlers/foo.ts` and `jobs/foo.ts` both resolve to `foo.zip`.
 
 ### External Dependencies
 

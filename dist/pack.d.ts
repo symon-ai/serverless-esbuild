@@ -1,6 +1,8 @@
 import type EsbuildServerlessPlugin from './index';
 import type { FunctionBuildResult, FunctionReference, IFiles, PackageGroup } from './types';
 export declare const shouldPackageSeparately: (plugin: EsbuildServerlessPlugin) => boolean;
+export declare const getArtifactNameFromBundlePath: (bundlePath: string) => string;
+export declare const assertNoDuplicateArtifactNames: (packageGroups: PackageGroup[]) => void;
 export declare const groupBuildResultsByBundlePath: (buildResults: FunctionBuildResult[]) => PackageGroup[];
 export declare const filterFilesForZipPackage: ({
   files,

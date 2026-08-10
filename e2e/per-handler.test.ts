@@ -51,24 +51,24 @@ test('per-handler', () => {
   const funcCS3Key = deterministicResources.FuncCLambdaFunction.Properties.Code.S3Key;
 
   expect(funcAS3Key).toEqual(funcBS3Key);
-  expect(funcAS3Key).toContain('funcA.zip');
-  expect(funcCS3Key).toContain('funcC.zip');
+  expect(funcAS3Key).toContain('foo.zip');
+  expect(funcCS3Key).toContain('bar.zip');
   expect(funcCS3Key).not.toEqual(funcAS3Key);
 
   expect(deterministicResources).toMatchSnapshot({
     FuncALambdaFunction: {
       Properties: {
-        Code: { S3Key: expect.stringContaining('funcA.zip') },
+        Code: { S3Key: expect.stringContaining('foo.zip') },
       },
     },
     FuncBLambdaFunction: {
       Properties: {
-        Code: { S3Key: expect.stringContaining('funcA.zip') },
+        Code: { S3Key: expect.stringContaining('foo.zip') },
       },
     },
     FuncCLambdaFunction: {
       Properties: {
-        Code: { S3Key: expect.stringContaining('funcC.zip') },
+        Code: { S3Key: expect.stringContaining('bar.zip') },
       },
     },
   });

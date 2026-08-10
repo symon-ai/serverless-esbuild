@@ -50,7 +50,7 @@ export interface Configuration extends EsbuildOptions {
 export interface PackageGroup {
   bundlePath: string;
   functions: FunctionBuildResult[];
-  representativeAlias: string;
+  artifactName: string;
 }
 export interface EsbuildFunctionDefinitionHandler extends Serverless.FunctionDefinitionHandler {
   disposeContext?: boolean;

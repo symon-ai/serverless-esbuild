@@ -92,6 +92,7 @@ See [example folder](examples) for some example configurations.
 | `skipBuild`            | Avoid rebuilding lambda artifacts in favor of reusing previous build artifacts.                                                                                                                    | `false`                                             |
 | `skipRebuild`          | A boolean defining whether rebuild is avoided. Generally rebuild produces faster builds but in some context scenarios with many lambdas or low memory computer (like Github Actions) it can cause memory leaks.                                    | `false`                                             |
 | `skipBuildExcludeFns` | An array of lambda names that will always be rebuilt if `skipBuild` is set to `true` and bundling individually. This is helpful for dynamically generated functions like serverless-plugin-warmup. | `[]`                                                 |
+| `packagePerHandler` | Package one zip per resolved handler entry file instead of per function. Multiple functions that export handlers from the same source file share one artifact. | `false` |
 | `stripEntryResolveExtensions` | A boolean that determines if entrypoints using custom file extensions provided in the `resolveExtensions` ESbuild setting should be stripped of their custom extension upon packing the final bundle for that file. Example: `myLambda.custom.ts` would result in `myLambda.js` instead of `myLambda.custom.js`.
 | `disposeContext` | An option to disable the disposal of the context.(Functions can override the global `disposeContext` configuration by specifying their own `disposeContext` option in their individual configurations.) | `true`
 #### Default Esbuild Options
@@ -206,6 +207,24 @@ module.exports = (serverless) => ({
 ### Including Extra Files
 
 [Serverless Package Configuration](https://www.serverless.com/framework/docs/providers/aws/guide/packaging#package-configuration) will behave in the same way as native packaging. You can use `patterns`, `include` and `exclude` to include extra files into your bundles.
+
+### Packaging Per Handler
+
+By default, Serverless `package.individually: true` creates one zip per function. Set `packagePerHandler: true` to create one zip per resolved handler entry file instead. Multiple functions that export handlers from the same source file share one artifact.
+
+```yml
+custom:
+  esbuild:
+    packagePerHandler: true
+
+functions:
+  funcA:
+    handler: handlers/foo.handlerA
+  funcB:
+    handler: handlers/foo.handlerB
+```
+
+In this example, `funcA` and `funcB` both resolve to `handlers/foo.ts`, so they are packaged into a single zip named after the first declared function (`funcA.zip`). Each function still uses its own handler export at runtime.
 
 ### External Dependencies
 

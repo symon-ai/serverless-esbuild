@@ -24,6 +24,14 @@ export function assertIsString(input: unknown, message = 'input is not a string'
   }
 }
 
+export function getHandlerFilePath(handler: string, esbuildEntrypoint?: string): string {
+  const entrypoint = esbuildEntrypoint || handler;
+  const fnName = path.extname(entrypoint);
+  const fnNameLastAppearanceIndex = entrypoint.lastIndexOf(fnName);
+
+  return entrypoint.substring(0, fnNameLastAppearanceIndex);
+}
+
 export function extractFunctionEntries(
   cwd: string,
   provider: string,
@@ -65,12 +73,7 @@ export function extractFunctionEntries(
       assert(func, `${functionAlias} not found in functions`);
 
       const { handler, esbuildEntrypoint } = func;
-      const entrypoint = esbuildEntrypoint || handler;
-
-      const fnName = path.extname(entrypoint);
-      const fnNameLastAppearanceIndex = entrypoint.lastIndexOf(fnName);
-      // replace only last instance to allow the same name for file and handler
-      const fileName = entrypoint.substring(0, fnNameLastAppearanceIndex);
+      const fileName = getHandlerFilePath(handler, esbuildEntrypoint);
 
       const extensions = resolveExtensions ?? DEFAULT_EXTENSIONS;
 

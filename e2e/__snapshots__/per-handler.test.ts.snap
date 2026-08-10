@@ -1,0 +1,764 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`per-handler 1`] = `
+""use strict";
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// handlers/foo.ts
+var foo_exports = {};
+__export(foo_exports, {
+  handlerA: () => handlerA,
+  handlerB: () => handlerB
+});
+module.exports = __toCommonJS(foo_exports);
+async function handlerA() {
+  return {
+    statusCode: 200,
+    body: JSON.stringify({ handler: "handlerA" })
+  };
+}
+async function handlerB() {
+  return {
+    statusCode: 200,
+    body: JSON.stringify({ handler: "handlerB" })
+  };
+}
+// Annotate the CommonJS export names for ESM import in node:
+0 && (module.exports = {
+  handlerA,
+  handlerB
+});
+"
+`;
+
+exports[`per-handler 2`] = `
+""use strict";
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// handlers/bar.ts
+var bar_exports = {};
+__export(bar_exports, {
+  handler: () => handler
+});
+module.exports = __toCommonJS(bar_exports);
+async function handler() {
+  return {
+    statusCode: 200,
+    body: JSON.stringify({ handler: "bar" })
+  };
+}
+// Annotate the CommonJS export names for ESM import in node:
+0 && (module.exports = {
+  handler
+});
+"
+`;
+
+exports[`per-handler 3`] = `"2010-09-09"`;
+
+exports[`per-handler 4`] = `"The AWS CloudFormation template for this Serverless application"`;
+
+exports[`per-handler 5`] = `
+{
+  "FuncALambdaFunctionQualifiedArn": {
+    "Description": "Current Lambda function version",
+    "Export": {
+      "Name": "sls-serverless-example-dev-FuncALambdaFunctionQualifiedArn",
+    },
+    "Value": {
+      "Ref": Any<String>,
+    },
+  },
+  "FuncBLambdaFunctionQualifiedArn": {
+    "Description": "Current Lambda function version",
+    "Export": {
+      "Name": "sls-serverless-example-dev-FuncBLambdaFunctionQualifiedArn",
+    },
+    "Value": {
+      "Ref": Any<String>,
+    },
+  },
+  "FuncCLambdaFunctionQualifiedArn": {
+    "Description": "Current Lambda function version",
+    "Export": {
+      "Name": "sls-serverless-example-dev-FuncCLambdaFunctionQualifiedArn",
+    },
+    "Value": {
+      "Ref": Any<String>,
+    },
+  },
+  "ServerlessDeploymentBucketName": {
+    "Export": {
+      "Name": "sls-serverless-example-dev-ServerlessDeploymentBucketName",
+    },
+    "Value": {
+      "Ref": "ServerlessDeploymentBucket",
+    },
+  },
+  "ServiceEndpoint": {
+    "Description": "URL of the service endpoint",
+    "Export": {
+      "Name": "sls-serverless-example-dev-ServiceEndpoint",
+    },
+    "Value": {
+      "Fn::Join": [
+        "",
+        [
+          "https://",
+          {
+            "Ref": "ApiGatewayRestApi",
+          },
+          ".execute-api.",
+          {
+            "Ref": "AWS::Region",
+          },
+          ".",
+          {
+            "Ref": "AWS::URLSuffix",
+          },
+          "/dev",
+        ],
+      ],
+    },
+  },
+}
+`;
+
+exports[`per-handler 6`] = `
+{
+  "ApiGatewayMethodAGet": {
+    "DependsOn": [
+      "FuncALambdaPermissionApiGateway",
+    ],
+    "Properties": {
+      "ApiKeyRequired": false,
+      "AuthorizationType": "NONE",
+      "HttpMethod": "GET",
+      "Integration": {
+        "IntegrationHttpMethod": "POST",
+        "Type": "AWS_PROXY",
+        "Uri": {
+          "Fn::Join": [
+            "",
+            [
+              "arn:",
+              {
+                "Ref": "AWS::Partition",
+              },
+              ":apigateway:",
+              {
+                "Ref": "AWS::Region",
+              },
+              ":lambda:path/2015-03-31/functions/",
+              {
+                "Fn::GetAtt": [
+                  "FuncALambdaFunction",
+                  "Arn",
+                ],
+              },
+              "/invocations",
+            ],
+          ],
+        },
+      },
+      "MethodResponses": [],
+      "RequestParameters": {},
+      "ResourceId": {
+        "Ref": "ApiGatewayResourceA",
+      },
+      "RestApiId": {
+        "Ref": "ApiGatewayRestApi",
+      },
+    },
+    "Type": "AWS::ApiGateway::Method",
+  },
+  "ApiGatewayMethodBGet": {
+    "DependsOn": [
+      "FuncBLambdaPermissionApiGateway",
+    ],
+    "Properties": {
+      "ApiKeyRequired": false,
+      "AuthorizationType": "NONE",
+      "HttpMethod": "GET",
+      "Integration": {
+        "IntegrationHttpMethod": "POST",
+        "Type": "AWS_PROXY",
+        "Uri": {
+          "Fn::Join": [
+            "",
+            [
+              "arn:",
+              {
+                "Ref": "AWS::Partition",
+              },
+              ":apigateway:",
+              {
+                "Ref": "AWS::Region",
+              },
+              ":lambda:path/2015-03-31/functions/",
+              {
+                "Fn::GetAtt": [
+                  "FuncBLambdaFunction",
+                  "Arn",
+                ],
+              },
+              "/invocations",
+            ],
+          ],
+        },
+      },
+      "MethodResponses": [],
+      "RequestParameters": {},
+      "ResourceId": {
+        "Ref": "ApiGatewayResourceB",
+      },
+      "RestApiId": {
+        "Ref": "ApiGatewayRestApi",
+      },
+    },
+    "Type": "AWS::ApiGateway::Method",
+  },
+  "ApiGatewayMethodCGet": {
+    "DependsOn": [
+      "FuncCLambdaPermissionApiGateway",
+    ],
+    "Properties": {
+      "ApiKeyRequired": false,
+      "AuthorizationType": "NONE",
+      "HttpMethod": "GET",
+      "Integration": {
+        "IntegrationHttpMethod": "POST",
+        "Type": "AWS_PROXY",
+        "Uri": {
+          "Fn::Join": [
+            "",
+            [
+              "arn:",
+              {
+                "Ref": "AWS::Partition",
+              },
+              ":apigateway:",
+              {
+                "Ref": "AWS::Region",
+              },
+              ":lambda:path/2015-03-31/functions/",
+              {
+                "Fn::GetAtt": [
+                  "FuncCLambdaFunction",
+                  "Arn",
+                ],
+              },
+              "/invocations",
+            ],
+          ],
+        },
+      },
+      "MethodResponses": [],
+      "RequestParameters": {},
+      "ResourceId": {
+        "Ref": "ApiGatewayResourceC",
+      },
+      "RestApiId": {
+        "Ref": "ApiGatewayRestApi",
+      },
+    },
+    "Type": "AWS::ApiGateway::Method",
+  },
+  "ApiGatewayResourceA": {
+    "Properties": {
+      "ParentId": {
+        "Fn::GetAtt": [
+          "ApiGatewayRestApi",
+          "RootResourceId",
+        ],
+      },
+      "PathPart": "a",
+      "RestApiId": {
+        "Ref": "ApiGatewayRestApi",
+      },
+    },
+    "Type": "AWS::ApiGateway::Resource",
+  },
+  "ApiGatewayResourceB": {
+    "Properties": {
+      "ParentId": {
+        "Fn::GetAtt": [
+          "ApiGatewayRestApi",
+          "RootResourceId",
+        ],
+      },
+      "PathPart": "b",
+      "RestApiId": {
+        "Ref": "ApiGatewayRestApi",
+      },
+    },
+    "Type": "AWS::ApiGateway::Resource",
+  },
+  "ApiGatewayResourceC": {
+    "Properties": {
+      "ParentId": {
+        "Fn::GetAtt": [
+          "ApiGatewayRestApi",
+          "RootResourceId",
+        ],
+      },
+      "PathPart": "c",
+      "RestApiId": {
+        "Ref": "ApiGatewayRestApi",
+      },
+    },
+    "Type": "AWS::ApiGateway::Resource",
+  },
+  "ApiGatewayRestApi": {
+    "Properties": {
+      "EndpointConfiguration": {
+        "Types": [
+          "EDGE",
+        ],
+      },
+      "Name": "dev-serverless-example",
+      "Policy": "",
+    },
+    "Type": "AWS::ApiGateway::RestApi",
+  },
+  "FuncALambdaFunction": {
+    "DependsOn": [
+      "FuncALogGroup",
+    ],
+    "Properties": {
+      "Code": {
+        "S3Bucket": {
+          "Ref": "ServerlessDeploymentBucket",
+        },
+        "S3Key": StringContaining "funcA.zip",
+      },
+      "FunctionName": "serverless-example-dev-funcA",
+      "Handler": "handlers/foo.handlerA",
+      "MemorySize": 1024,
+      "Role": {
+        "Fn::GetAtt": [
+          "IamRoleLambdaExecution",
+          "Arn",
+        ],
+      },
+      "Runtime": "nodejs18.x",
+      "Timeout": 6,
+    },
+    "Type": "AWS::Lambda::Function",
+  },
+  "FuncALambdaPermissionApiGateway": {
+    "Properties": {
+      "Action": "lambda:InvokeFunction",
+      "FunctionName": {
+        "Fn::GetAtt": [
+          "FuncALambdaFunction",
+          "Arn",
+        ],
+      },
+      "Principal": "apigateway.amazonaws.com",
+      "SourceArn": {
+        "Fn::Join": [
+          "",
+          [
+            "arn:",
+            {
+              "Ref": "AWS::Partition",
+            },
+            ":execute-api:",
+            {
+              "Ref": "AWS::Region",
+            },
+            ":",
+            {
+              "Ref": "AWS::AccountId",
+            },
+            ":",
+            {
+              "Ref": "ApiGatewayRestApi",
+            },
+            "/*/*",
+          ],
+        ],
+      },
+    },
+    "Type": "AWS::Lambda::Permission",
+  },
+  "FuncALogGroup": {
+    "Properties": {
+      "LogGroupName": "/aws/lambda/serverless-example-dev-funcA",
+    },
+    "Type": "AWS::Logs::LogGroup",
+  },
+  "FuncBLambdaFunction": {
+    "DependsOn": [
+      "FuncBLogGroup",
+    ],
+    "Properties": {
+      "Code": {
+        "S3Bucket": {
+          "Ref": "ServerlessDeploymentBucket",
+        },
+        "S3Key": StringContaining "funcA.zip",
+      },
+      "FunctionName": "serverless-example-dev-funcB",
+      "Handler": "handlers/foo.handlerB",
+      "MemorySize": 1024,
+      "Role": {
+        "Fn::GetAtt": [
+          "IamRoleLambdaExecution",
+          "Arn",
+        ],
+      },
+      "Runtime": "nodejs18.x",
+      "Timeout": 6,
+    },
+    "Type": "AWS::Lambda::Function",
+  },
+  "FuncBLambdaPermissionApiGateway": {
+    "Properties": {
+      "Action": "lambda:InvokeFunction",
+      "FunctionName": {
+        "Fn::GetAtt": [
+          "FuncBLambdaFunction",
+          "Arn",
+        ],
+      },
+      "Principal": "apigateway.amazonaws.com",
+      "SourceArn": {
+        "Fn::Join": [
+          "",
+          [
+            "arn:",
+            {
+              "Ref": "AWS::Partition",
+            },
+            ":execute-api:",
+            {
+              "Ref": "AWS::Region",
+            },
+            ":",
+            {
+              "Ref": "AWS::AccountId",
+            },
+            ":",
+            {
+              "Ref": "ApiGatewayRestApi",
+            },
+            "/*/*",
+          ],
+        ],
+      },
+    },
+    "Type": "AWS::Lambda::Permission",
+  },
+  "FuncBLogGroup": {
+    "Properties": {
+      "LogGroupName": "/aws/lambda/serverless-example-dev-funcB",
+    },
+    "Type": "AWS::Logs::LogGroup",
+  },
+  "FuncCLambdaFunction": {
+    "DependsOn": [
+      "FuncCLogGroup",
+    ],
+    "Properties": {
+      "Code": {
+        "S3Bucket": {
+          "Ref": "ServerlessDeploymentBucket",
+        },
+        "S3Key": StringContaining "funcC.zip",
+      },
+      "FunctionName": "serverless-example-dev-funcC",
+      "Handler": "handlers/bar.handler",
+      "MemorySize": 1024,
+      "Role": {
+        "Fn::GetAtt": [
+          "IamRoleLambdaExecution",
+          "Arn",
+        ],
+      },
+      "Runtime": "nodejs18.x",
+      "Timeout": 6,
+    },
+    "Type": "AWS::Lambda::Function",
+  },
+  "FuncCLambdaPermissionApiGateway": {
+    "Properties": {
+      "Action": "lambda:InvokeFunction",
+      "FunctionName": {
+        "Fn::GetAtt": [
+          "FuncCLambdaFunction",
+          "Arn",
+        ],
+      },
+      "Principal": "apigateway.amazonaws.com",
+      "SourceArn": {
+        "Fn::Join": [
+          "",
+          [
+            "arn:",
+            {
+              "Ref": "AWS::Partition",
+            },
+            ":execute-api:",
+            {
+              "Ref": "AWS::Region",
+            },
+            ":",
+            {
+              "Ref": "AWS::AccountId",
+            },
+            ":",
+            {
+              "Ref": "ApiGatewayRestApi",
+            },
+            "/*/*",
+          ],
+        ],
+      },
+    },
+    "Type": "AWS::Lambda::Permission",
+  },
+  "FuncCLogGroup": {
+    "Properties": {
+      "LogGroupName": "/aws/lambda/serverless-example-dev-funcC",
+    },
+    "Type": "AWS::Logs::LogGroup",
+  },
+  "IamRoleLambdaExecution": {
+    "Properties": {
+      "AssumeRolePolicyDocument": {
+        "Statement": [
+          {
+            "Action": [
+              "sts:AssumeRole",
+            ],
+            "Effect": "Allow",
+            "Principal": {
+              "Service": [
+                "lambda.amazonaws.com",
+              ],
+            },
+          },
+        ],
+        "Version": "2012-10-17",
+      },
+      "Path": "/",
+      "Policies": [
+        {
+          "PolicyDocument": {
+            "Statement": [
+              {
+                "Action": [
+                  "logs:CreateLogStream",
+                  "logs:CreateLogGroup",
+                  "logs:TagResource",
+                ],
+                "Effect": "Allow",
+                "Resource": [
+                  {
+                    "Fn::Sub": "arn:\${AWS::Partition}:logs:\${AWS::Region}:\${AWS::AccountId}:log-group:/aws/lambda/serverless-example-dev*:*",
+                  },
+                ],
+              },
+              {
+                "Action": [
+                  "logs:PutLogEvents",
+                ],
+                "Effect": "Allow",
+                "Resource": [
+                  {
+                    "Fn::Sub": "arn:\${AWS::Partition}:logs:\${AWS::Region}:\${AWS::AccountId}:log-group:/aws/lambda/serverless-example-dev*:*:*",
+                  },
+                ],
+              },
+            ],
+            "Version": "2012-10-17",
+          },
+          "PolicyName": {
+            "Fn::Join": [
+              "-",
+              [
+                "serverless-example",
+                "dev",
+                "lambda",
+              ],
+            ],
+          },
+        },
+      ],
+      "RoleName": {
+        "Fn::Join": [
+          "-",
+          [
+            "serverless-example",
+            "dev",
+            {
+              "Ref": "AWS::Region",
+            },
+            "lambdaRole",
+          ],
+        ],
+      },
+    },
+    "Type": "AWS::IAM::Role",
+  },
+  "ServerlessDeploymentBucket": {
+    "Properties": {
+      "BucketEncryption": {
+        "ServerSideEncryptionConfiguration": [
+          {
+            "ServerSideEncryptionByDefault": {
+              "SSEAlgorithm": "AES256",
+            },
+          },
+        ],
+      },
+    },
+    "Type": "AWS::S3::Bucket",
+  },
+  "ServerlessDeploymentBucketPolicy": {
+    "Properties": {
+      "Bucket": {
+        "Ref": "ServerlessDeploymentBucket",
+      },
+      "PolicyDocument": {
+        "Statement": [
+          {
+            "Action": "s3:*",
+            "Condition": {
+              "Bool": {
+                "aws:SecureTransport": false,
+              },
+            },
+            "Effect": "Deny",
+            "Principal": "*",
+            "Resource": [
+              {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition",
+                    },
+                    ":s3:::",
+                    {
+                      "Ref": "ServerlessDeploymentBucket",
+                    },
+                    "/*",
+                  ],
+                ],
+              },
+              {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition",
+                    },
+                    ":s3:::",
+                    {
+                      "Ref": "ServerlessDeploymentBucket",
+                    },
+                  ],
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    },
+    "Type": "AWS::S3::BucketPolicy",
+  },
+}
+`;
+
+exports[`per-handler 7`] = `
+{
+  "DependsOn": [
+    "ApiGatewayMethodAGet",
+    "ApiGatewayMethodBGet",
+    "ApiGatewayMethodCGet",
+  ],
+  "Properties": {
+    "RestApiId": {
+      "Ref": "ApiGatewayRestApi",
+    },
+    "StageName": "dev",
+  },
+  "Type": "AWS::ApiGateway::Deployment",
+}
+`;
+
+exports[`per-handler 8`] = `
+{
+  "DeletionPolicy": "Retain",
+  "Properties": {
+    "CodeSha256": Any<String>,
+    "FunctionName": {
+      "Ref": "FuncALambdaFunction",
+    },
+  },
+  "Type": "AWS::Lambda::Version",
+}
+`;
+
+exports[`per-handler 9`] = `
+{
+  "DeletionPolicy": "Retain",
+  "Properties": {
+    "CodeSha256": Any<String>,
+    "FunctionName": {
+      "Ref": "FuncBLambdaFunction",
+    },
+  },
+  "Type": "AWS::Lambda::Version",
+}
+`;
+
+exports[`per-handler 10`] = `
+{
+  "DeletionPolicy": "Retain",
+  "Properties": {
+    "CodeSha256": Any<String>,
+    "FunctionName": {
+      "Ref": "FuncCLambdaFunction",
+    },
+  },
+  "Type": "AWS::Lambda::Version",
+}
+`;

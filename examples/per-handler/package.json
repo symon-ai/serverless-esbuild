@@ -1,0 +1,11 @@
+{
+  "scripts": {
+    "start": "sls offline"
+  },
+  "devDependencies": {
+    "@types/node": "^18.7.21",
+    "esbuild": "^0.24.0",
+    "serverless": "^3.22.0",
+    "serverless-esbuild": "file:../.."
+  }
+}

@@ -1,4 +1,4 @@
-test-e2e: test-e2e-minimal test-e2e-individually test-e2e-complete test-e2e-config
+test-e2e: test-e2e-minimal test-e2e-individually test-e2e-per-handler test-e2e-complete test-e2e-config
 
 PATCH_REQUIRE = sed -i.bak "s/ERR_REQUIRE_ESM/ERR_REQUIRE_ESM' || error.code === 'ERR_REQUIRE_ASYNC_MODULE/" node_modules/serverless/lib/utils/require-with-import-fallback.js
 
@@ -17,6 +17,13 @@ test-e2e-individually: build
 	cd ./.test-artifacts/individually && yarn install && $(PATCH_REQUIRE) && npx sls package
 	cd ./.test-artifacts/individually/.serverless && unzip hello1.zip && unzip hello2.zip
 	npx jest -c jest.config.e2e.js --ci ./e2e/individually.test.ts
+	rm -fr ./.test-artifacts
+
+test-e2e-per-handler: build
+	rm -fr ./.test-artifacts && mkdir -p ./.test-artifacts/per-handler && rsync -r ./examples/per-handler/ ./.test-artifacts/per-handler/
+	cd ./.test-artifacts/per-handler && npm install && $(PATCH_REQUIRE) && npx sls package
+	cd ./.test-artifacts/per-handler/.serverless && unzip funcA.zip && unzip funcC.zip
+	npx jest -c jest.config.e2e.js --ci ./e2e/per-handler.test.ts
 	rm -fr ./.test-artifacts
 
 test-e2e-complete: build

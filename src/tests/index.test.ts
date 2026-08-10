@@ -263,6 +263,45 @@ describe('Move Artifacts', () => {
     });
   });
 
+  describe('packagePerHandler', () => {
+    it('should update function package artifacts base path to the serverless folder', async () => {
+      const plugin = new EsbuildServerlessPlugin(
+        mockServerlessConfig({
+          custom: {
+            esbuild: {
+              packagePerHandler: true,
+            },
+          },
+          package: {},
+        }),
+        mockOptions
+      );
+
+      plugin.hooks.initialize?.();
+
+      await plugin.moveArtifacts();
+
+      expect(plugin.functions).toMatchInlineSnapshot(`
+        {
+          "hello1": {
+            "events": [],
+            "handler": "hello1.handler",
+            "package": {
+              "artifact": ".serverless/hello1",
+            },
+          },
+          "hello2": {
+            "events": [],
+            "handler": "hello2.handler",
+            "package": {
+              "artifact": ".serverless/hello2",
+            },
+          },
+        }
+      `);
+    });
+  });
+
   describe('service package', () => {
     it('should update the service package artifact base path to the serverless folder', async () => {
       const plugin = new EsbuildServerlessPlugin(mockServerlessConfig(packageService), mockOptions);

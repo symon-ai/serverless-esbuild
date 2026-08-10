@@ -44,6 +44,7 @@ export async function bundle(this: EsbuildServerlessPlugin): Promise<void> {
     'skipBuildExcludeFns',
     'stripEntryResolveExtensions',
     'disposeContext',
+    'packagePerHandler',
   ].reduce<Record<string, any>>((options, optionName) => {
     const { [optionName]: _, ...rest } = options;
 

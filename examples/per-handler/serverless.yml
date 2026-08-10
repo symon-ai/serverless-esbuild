@@ -1,0 +1,34 @@
+service: serverless-example
+
+plugins:
+  - serverless-esbuild
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+
+custom:
+  esbuild:
+    packagePerHandler: true
+
+functions:
+  funcA:
+    handler: handlers/foo.handlerA
+    events:
+      - http:
+          path: a
+          method: get
+
+  funcB:
+    handler: handlers/foo.handlerB
+    events:
+      - http:
+          path: b
+          method: get
+
+  funcC:
+    handler: handlers/bar.handler
+    events:
+      - http:
+          path: c
+          method: get
